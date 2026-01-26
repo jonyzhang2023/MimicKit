@@ -155,8 +155,22 @@ class PPOAgent(base_agent.BaseAgent):
         for i in range(self._update_epochs):
             for b in range(num_batches):
                 batch = self._exp_buffer.sample(batch_size)
+                
+                # 检查是否使用优先经验回放
+                weights = batch.get("weights", None)
+                indices = batch.get("indices", None)
+                
                 loss_info = self._compute_loss(batch)
                 loss = loss_info["loss"]
+                
+                # 如果使用优先经验回放，应用权重
+                if weights is not None:
+                    # 只对随机动作样本应用权重
+                    rand_action_mask = (batch["rand_action_mask"] == 1.0)
+                    if rand_action_mask.any():
+                        weights = weights[rand_action_mask]
+                        loss = loss * weights.mean()
+                
                 self._optimizer.step(loss)
 
                 torch_util.add_torch_dict(loss_info, train_info)

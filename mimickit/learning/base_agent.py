@@ -201,8 +201,32 @@ class BaseAgent(torch.nn.Module):
     def _build_exp_buffer(self, config):
         buffer_length = self._get_exp_buffer_length()
         batch_size = self.get_num_envs()
-        self._exp_buffer = experience_buffer.ExperienceBuffer(buffer_length=buffer_length, batch_size=batch_size,
-                                                              device=self._device)
+        
+        # 检查是否使用优先经验回放
+        use_prioritized_buffer = config.get("use_prioritized_buffer", False)
+        if use_prioritized_buffer:
+            # 使用优先经验回放缓冲区
+            alpha = config.get("prioritized_alpha", 0.6)
+            beta = config.get("prioritized_beta", 0.4)
+            beta_increment = config.get("prioritized_beta_increment", 0.001)
+            epsilon = config.get("prioritized_epsilon", 1e-6)
+            
+            self._exp_buffer = experience_buffer.PrioritizedExperienceBuffer(
+                buffer_length=buffer_length, 
+                batch_size=batch_size,
+                device=self._device,
+                alpha=alpha,
+                beta=beta,
+                beta_increment=beta_increment,
+                epsilon=epsilon
+            )
+        else:
+            # 使用普通经验回放缓冲区
+            self._exp_buffer = experience_buffer.ExperienceBuffer(
+                buffer_length=buffer_length, 
+                batch_size=batch_size,
+                device=self._device
+            )
         return
 
     def _build_return_tracker(self):

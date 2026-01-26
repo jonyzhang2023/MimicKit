@@ -157,3 +157,127 @@ class ExperienceBuffer():
         sample_count = self.get_sample_count()
         rand_idx = torch.remainder(rand_idx, sample_count)
         return rand_idx
+
+
+class PrioritizedExperienceBuffer(ExperienceBuffer):
+    def __init__(self, buffer_length, batch_size, device, alpha=0.6, beta=0.4, beta_increment=0.001, epsilon=1e-6):
+        super().__init__(buffer_length, batch_size, device)
+        self._alpha = alpha  # 优先级指数
+        self._beta = beta  # 重要性采样权重指数
+        self._beta_increment = beta_increment  # beta的增量
+        self._epsilon = epsilon  # 防止优先级为0
+        
+        # 初始化优先级缓冲区
+        self._priorities = torch.zeros(self.get_capacity(), dtype=torch.float32, device=self._device)
+        self._max_priority = 1.0  # 初始最大优先级
+        return
+    
+    def reset(self):
+        super().reset()
+        self._priorities.zero_()
+        self._max_priority = 1.0
+        return
+    
+    def clear(self):
+        super().clear()
+        self._priorities.zero_()
+        self._max_priority = 1.0
+        return
+    
+    def record(self, name, data):
+        super().record(name, data)
+        
+        # 为新记录的样本设置优先级
+        if name in ['rewards', 'r']:
+            # 计算误差作为优先级的基础
+            error = torch.abs(data).squeeze()
+            start_idx = self._buffer_head * self._batch_size
+            end_idx = start_idx + self._batch_size
+            
+            # 更新优先级
+            self._priorities[start_idx:end_idx] = (error + self._epsilon) ** self._alpha
+            self._max_priority = max(self._max_priority, error.max().item() + self._epsilon)
+        return
+    
+    def sample(self, n):
+        output = dict()
+        
+        # 获取当前样本数量
+        sample_count = self.get_sample_count()
+        
+        # 计算采样概率（在CPU上进行，避免CUDA异步错误）
+        priorities = self._priorities[:sample_count].cpu()
+        
+        try:
+            # 添加小的epsilon值确保所有优先级都为正
+            priorities = priorities + self._epsilon
+            
+            # 确保所有优先级都为正
+            priorities = torch.clamp(priorities, min=self._epsilon)
+            
+            # 计算采样概率
+            total_priority = priorities.sum()
+            if total_priority <= 0:
+                # 如果总优先级为0，使用均匀分布
+                sampling_probabilities = torch.ones_like(priorities) / len(priorities)
+            else:
+                sampling_probabilities = priorities / total_priority
+            
+            # 确保概率都在有效范围内
+            sampling_probabilities = torch.clamp(sampling_probabilities, min=0.0, max=1.0)
+            
+            # 重新归一化概率
+            total_prob = sampling_probabilities.sum()
+            if total_prob > 0:
+                sampling_probabilities = sampling_probabilities / total_prob
+            else:
+                # 如果总概率为0，使用均匀分布
+                sampling_probabilities = torch.ones_like(sampling_probabilities) / len(sampling_probabilities)
+            
+            # 采样索引（在CPU上进行）
+            rand_idx = torch.multinomial(sampling_probabilities, n, replacement=True)
+            
+            # 计算重要性采样权重
+            weights = (sample_count * sampling_probabilities[rand_idx]) ** (-self._beta)
+            weights = weights / weights.max()
+            
+            # 移回原始设备
+            rand_idx = rand_idx.to(self._device)
+            weights = weights.to(self._device)
+        except Exception as e:
+            # 如果出现任何错误，使用均匀采样
+            print(f"采样出错，使用均匀采样: {e}")
+            rand_idx = torch.randint(0, sample_count, (n,), device=self._device)
+            weights = torch.ones(n, device=self._device)
+        
+        # 增加beta值
+        self._beta = min(1.0, self._beta + self._beta_increment)
+        
+        # 收集样本数据
+        for key, data in self._flat_buffers.items():
+            batch_data = data[rand_idx]
+            output[key] = batch_data
+        
+        # 添加重要性采样权重
+        output['weights'] = weights
+        output['indices'] = rand_idx
+        
+        return output
+    
+    def update_priorities(self, indices, errors):
+        # 根据新的误差更新优先级
+        priorities = (errors + self._epsilon) ** self._alpha
+        self._priorities[indices] = priorities
+        self._max_priority = max(self._max_priority, priorities.max().item())
+        return
+    
+    def get_beta(self):
+        return self._beta
+    
+    def set_alpha(self, alpha):
+        self._alpha = alpha
+        return
+    
+    def set_beta(self, beta):
+        self._beta = beta
+        return
