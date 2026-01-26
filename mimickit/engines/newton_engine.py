@@ -902,6 +902,7 @@ class NewtonEngine(engine.Engine):
                 obj_builder.add_mjcf(
                     asset_file,
                     floating=not fix_root,
+                    ignore_inertial_definitions=False,
                     collapse_fixed_joints=False,
                     enable_self_collisions=enable_self_collisions,
                     convert_3d_hinge_to_ball_joints=True
@@ -910,6 +911,7 @@ class NewtonEngine(engine.Engine):
                 obj_builder.add_urdf(
                     asset_file,
                     floating=not fix_root,
+                    ignore_inertial_definitions=False,
                     collapse_fixed_joints=False,
                     enable_self_collisions=enable_self_collisions,
                     joint_ordering="dfs"

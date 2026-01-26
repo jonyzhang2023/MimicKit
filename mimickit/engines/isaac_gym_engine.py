@@ -433,7 +433,7 @@ class IsaacGymEngine(engine.Engine):
     
     def find_obj_body_id(self, obj_id, body_name):
         env_ptr = self.get_env(0)
-        return self._gym.find_actor_rigid_body_handle(env_ptr, obj_id, body_name)
+        return self._gym.find_actor_rigid_body_index(env_ptr, obj_id, body_name, gymapi.DOMAIN_ACTOR)
     
     def get_env(self, env_id):
         return self._envs[env_id]

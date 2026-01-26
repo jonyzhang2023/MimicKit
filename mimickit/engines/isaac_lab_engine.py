@@ -653,7 +653,7 @@ class IsaacLabEngine(engine.Engine):
         return
     
     def _create_simulator(self, sim_timestep, visualize):
-        self._app_launcher = AppLauncher({"headless": not visualize})
+        self._app_launcher = AppLauncher({"headless": not visualize, "device": self._device})
 
         import isaaclab.sim as sim_utils
         from isaacsim.core.utils.stage import get_current_stage

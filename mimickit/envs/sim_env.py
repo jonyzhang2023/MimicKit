@@ -207,7 +207,7 @@ class SimEnv(base_env.BaseEnv):
     
     def _build_camera(self, env_config):
         cam_pos = np.array([0.0, -5.0, 3.0])
-        cam_target = np.arrray([0.0, 0.0, 0.0])
+        cam_target = np.array([0.0, 0.0, 0.0])
         cam_mode = env_config.get("camera_mode", "still")
         cam_mode = camera.CameraMode[cam_mode]
 
